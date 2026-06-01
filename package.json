@@ -1,0 +1,35 @@
+{
+  "name": "read-bili",
+  "version": "1.0.0",
+  "description": "Bilibili video transcription & summarization tool — download audio, transcribe via SiliconFlow ASR, and output readable transcripts.",
+  "type": "module",
+  "main": "src/bilibili_pipeline.mjs",
+  "bin": {
+    "read-bili": "./src/bilibili_pipeline.mjs"
+  },
+  "files": [
+    "src/",
+    "docs/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "bilibili",
+    "transcription",
+    "asr",
+    "subtitles",
+    "video"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EricArcha/Read-Bili.git"
+  },
+  "bugs": {
+    "url": "https://github.com/EricArcha/Read-Bili/issues"
+  },
+  "homepage": "https://github.com/EricArcha/Read-Bili#readme"
+}
