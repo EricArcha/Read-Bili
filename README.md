@@ -195,4 +195,4 @@ git clone --depth 1 https://github.com/EricArcha/Read-Bili.git ~/.hermes/skills/
 
 ## Author
 
-Maintained by **EricArcha (Eric Lei)**.
+Maintained by **EricArcha**.

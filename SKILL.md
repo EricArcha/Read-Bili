@@ -5,7 +5,7 @@ description: |
   触发词：B站视频总结、B站转写、B站字幕提取、视频讲了什么、帮我解读、BV号解析、bilibili视频总结、b站视频内容、视频语音转文字、总结这个视频、这个视频在讲什么。
   与 bilibili-danmaku-extractor（弹幕提取/弹幕分析）区分：本 skill 专注视频语音内容的转录与总结 —— 优先官方字幕，其次 yt-dlp 下载音频 + 硅基流动 ASR 转写；支持长视频自动分段（240s/段）、音频完整性校验、失败指数退避重试，输出带 [mm:ss] 时间戳。
 version: 1.1.0
-author: EricArcha (Eric Lei)
+author: EricArcha
 license: MIT
 platforms: [macos, linux, windows]
 metadata:
@@ -113,5 +113,5 @@ git clone --depth 1 https://github.com/EricArcha/Read-Bili.git ~/.hermes/skills/
 
 ## 说明
 
-- 本 skill 的升级版由 EricArcha（Eric Lei）维护：https://github.com/EricArcha/Read-Bili
+- 本 skill 的升级版由 EricArcha 维护：https://github.com/EricArcha/Read-Bili
 - 依赖 B站网页结构 & yt-dlp 维护；B站反爬升级时可能需要浏览器 cookies（`--cookies-from-browser chrome`）。
