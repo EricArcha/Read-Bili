@@ -8,8 +8,21 @@ A Node.js pipeline that downloads audio from Bilibili videos and transcribes it 
 
 - **Official subtitles preferred** — if the video has built-in subtitles, they're used directly (free, fast)
 - **Audio ASR fallback** — no subtitles? Downloads audio via [yt-dlp](https://github.com/yt-dlp/yt-dlp) and transcribes via SiliconFlow's `TeleSpeechASR` model
+- **Long-video auto-segmentation** — audio longer than 180s is split into 240s chunks and transcribed segment-by-segment, with `[mm:ss]` timestamps in the output — no more silent 169-second truncation
+- **Duration validation** — `ffprobe` checks the downloaded audio against the video's expected length and warns if the download looks incomplete
+- **Automatic retry** — each ASR segment retries with exponential backoff (3 attempts) on transient failures
 - **Probe mode** — inspect video metadata (title, BV, subtitles, audio/video streams) without downloading
 - **Structured output** — saves probe results (`probe_result.json`), transcription data (`transcription_result.json`), and plain text (`transcript.txt`)
+
+## Features (中文)
+
+- **官方字幕优先** — 视频自带字幕时直接使用（免费、快速）
+- **音频 ASR 兜底** — 无字幕时通过 yt-dlp 下载音频，调用硅基流动 `TeleSpeechASR` 转写
+- **长视频自动分段** — 音频超过 180 秒自动切成 240 秒/段逐段转写，输出带 `[mm:ss]` 时间戳，彻底解决 169 秒静默截断
+- **音频完整性校验** — 用 ffprobe 验证下载音频时长与视频预期时长是否匹配，下载不完整会告警
+- **失败自动重试** — 每段 ASR 指数退避重试 3 次，应对瞬时故障
+- **探测模式** — 不下载即可查看视频元数据（标题/BV/字幕/音视频流）
+- **结构化输出** — 保存 probe 结果、转写 JSON、纯文本三种文件
 
 ## Prerequisites
 

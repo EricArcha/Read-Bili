@@ -429,6 +429,86 @@ async function transcribeWithSiliconFlow(filePath, apiKey, model) {
   };
 }
 
+/**
+ * Probe audio duration with ffprobe. Returns seconds (float) or null on failure.
+ */
+function probeAudioDuration(filePath) {
+  try {
+    const out = execSync(
+      `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`,
+      { stdio: "pipe", timeout: 15000 }
+    );
+    const dur = Number.parseFloat(String(out).trim());
+    return Number.isFinite(dur) && dur > 0 ? dur : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Split audio into segments of at most segmentSeconds using ffmpeg.
+ * Returns array of segment file paths, or null if segmentation is not needed/supported.
+ */
+function splitAudioIntoSegments(filePath, segmentSeconds = 240) {
+  const dir = dirname(filePath);
+  const base = filePath.replace(/\.(mp3|m4a|m4s|wav|aac|flac|ogg|opus)$/i, "");
+  const pattern = `${base}.seg%03d.mp3`;
+  try {
+    execSync(
+      `ffmpeg -y -i "${filePath}" -f segment -segment_time ${segmentSeconds} -c:a libmp3lame -q:a 2 -segment_format mp3 "${pattern}"`,
+      { stdio: "pipe", timeout: 600000 }
+    );
+    const segments = [];
+    for (let i = 0; ; i += 1) {
+      const seg = `${base}.seg${String(i).padStart(3, "0")}.mp3`;
+      if (existsSync(seg)) {
+        segments.push(seg);
+      } else {
+        break;
+      }
+    }
+    return segments.length > 0 ? segments : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Transcribe one audio file with exponential backoff retry (3 attempts).
+ * Returns { text, json } or throws after exhausting retries.
+ */
+async function transcribeSingleWithRetry(filePath, apiKey, model, label = "") {
+  const maxAttempts = 3;
+  let lastError = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const result = await transcribeWithSiliconFlow(filePath, apiKey, model);
+      const text = result.json?.text;
+      if (typeof text === "string" && text.trim()) {
+        return { text: text.trim(), json: result.json };
+      }
+      throw new Error("Empty transcript returned");
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxAttempts) {
+        const delayMs = 1000 * 2 ** (attempt - 1); // 1s, 2s
+        process.stderr.write(`[asr] ${label} attempt ${attempt} failed (${error.message}); retrying in ${delayMs}ms\n`);
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+  }
+  throw lastError ?? new Error("Transcription failed");
+}
+
+/**
+ * Format seconds as [mm:ss] timestamp marker.
+ */
+function formatTimestamp(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `[${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}]`;
+}
+
 async function runProbe(url, outputDir, apiKey) {
   const result = await probeVideo(url);
   await mkdir(outputDir, { recursive: true });
@@ -500,23 +580,76 @@ async function runPipeline(url, outputDir, apiKey, model, forceVideoFallback) {
         if (!ytDlpBin) {
           throw new Error("yt-dlp not found on PATH. Install it: https://github.com/yt-dlp/yt-dlp");
         }
-        const args = ["-x", "--audio-format", "mp3", "--audio-quality", "0", "-o", audioPath, "--", url];
-        const child = spawn(ytDlpBin, args, { stdio: "inherit", detached: true });
-        child.unref();
-        // Poll for file existence or timeout
-        const startTime = Date.now();
-        const pollInterval = 5000;
-        while (Date.now() - startTime < 300000) {
-          await new Promise(r => setTimeout(r, pollInterval));
-          if (existsSync(audioPath)) {
+        const ytUrl = normalizeVideoUrl(url);
+        const args = ["-x", "--audio-format", "mp3", "--audio-quality", "0", "-o", audioPath, "--", ytUrl];
+        // Bilibili now returns HTTP 412 for cookie-less downloads.
+        // Strategy: try with browser cookies first (fast, usually works);
+        // if the attempt fails before producing a file, retry without cookies.
+        const finalArgs = ["-x", "--audio-format", "mp3", "--audio-quality", "0", "--cookies-from-browser", "chrome", "--user-agent", USER_AGENT, "-o", audioPath, "--", ytUrl];
+        const child = spawn(ytDlpBin, finalArgs, { stdio: "inherit" });
+        // Race-safe download completion: resolve when child exits AND audio exists,
+        // fail fast if child exits with error (no 300s silent wait).
+        const downloadResult = await new Promise((resolve) => {
+          let settled = false;
+          const timer = setTimeout(() => {
+            if (!settled) {
+              settled = true;
+              child.kill("SIGKILL");
+              resolve({ ok: false, reason: "timeout-300s" });
+            }
+          }, 300000);
+          child.on("exit", (code, signal) => {
+            if (!settled) {
+              settled = true;
+              clearTimeout(timer);
+              if (existsSync(audioPath)) {
+                resolve({ ok: true });
+              } else {
+                resolve({ ok: false, reason: `exit code=${code} signal=${signal}` });
+              }
+            }
+          });
+        });
+        if (downloadResult.ok) {
+          summary.audio_mp3_path = audioPath;
+          summary.notes.push("yt-dlp extracted audio successfully (with browser cookies to bypass Bilibili 412).");
+        } else {
+          // Cookie path failed — retry once without cookies (some videos work anonymously)
+          summary.notes.push(`yt-dlp cookie attempt failed (${downloadResult.reason}); retrying without cookies.`);
+          const child2 = spawn(ytDlpBin, args, { stdio: "inherit" });
+          const retryResult = await new Promise((resolve) => {
+            let settled = false;
+            const timer = setTimeout(() => {
+              if (!settled) {
+                settled = true;
+                child2.kill("SIGKILL");
+                resolve({ ok: false, reason: "timeout-300s" });
+              }
+            }, 300000);
+            child2.on("exit", (code, signal) => {
+              if (!settled) {
+                settled = true;
+                clearTimeout(timer);
+                if (existsSync(audioPath)) {
+                  resolve({ ok: true });
+                } else {
+                  resolve({ ok: false, reason: `exit code=${code} signal=${signal}` });
+                }
+              }
+            });
+          });
+          if (retryResult.ok) {
             summary.audio_mp3_path = audioPath;
-            summary.notes.push("yt-dlp extracted audio successfully.");
-            break;
+            summary.notes.push("yt-dlp extracted audio successfully (anonymous, no cookies).");
+          } else {
+            if (retryResult.reason !== "timeout-300s") {
+              summary.notes.push(`yt-dlp failed: ${retryResult.reason}`);
+              summary.notes.push("Likely Bilibili 412 anti-scraping. A logged-in browser session or explicit cookies file is required.");
+            } else {
+              summary.notes.push("yt-dlp did not produce audio file within 300s");
+            }
+            throw new Error(`yt-dlp download failed: ${retryResult.reason}`);
           }
-        }
-        if (!summary.audio_mp3_path) {
-          child.kill("SIGKILL");
-          throw new Error("yt-dlp did not produce audio file within 300s");
         }
       } catch (e) {
         summary.notes.push("yt-dlp failed: " + (e.message ?? String(e)));
@@ -538,20 +671,83 @@ async function runPipeline(url, outputDir, apiKey, model, forceVideoFallback) {
     return;
   }
 
-  const transcription = await transcribeWithSiliconFlow(summary.audio_mp3_path, apiKey, model);
+  // --- Step A: validate downloaded audio duration against expected video length ---
+  const expectedDurationMs = Number(result.playinfo?.timelength) || null;
+  const actualDuration = probeAudioDuration(summary.audio_mp3_path);
+  if (expectedDurationMs && actualDuration) {
+    const expectedSec = expectedDurationMs / 1000;
+    const gap = expectedSec - actualDuration;
+    if (gap > expectedSec * 0.15) {
+      summary.notes.push(
+        `WARN: audio duration ${actualDuration.toFixed(0)}s is ${(gap / expectedSec * 100).toFixed(0)}% shorter than video ${expectedSec.toFixed(0)}s — download likely incomplete.`
+      );
+    } else {
+      summary.notes.push(`Audio duration verified: ${actualDuration.toFixed(0)}s (video ${expectedSec.toFixed(0)}s).`);
+    }
+  } else if (actualDuration) {
+    summary.notes.push(`Audio duration: ${actualDuration.toFixed(0)}s (no reference video duration).`);
+  } else {
+    summary.notes.push("WARN: could not probe audio duration.");
+  }
+
+  // --- Step B: segment long audio (>180s) into 240s chunks ---
+  const SEGMENT_SECONDS = 240;
+  const SEGMENT_THRESHOLD = 180;
+  let segments = null;
+  if (actualDuration && actualDuration > SEGMENT_THRESHOLD) {
+    summary.notes.push(`Audio is ${actualDuration.toFixed(0)}s (>${SEGMENT_THRESHOLD}s), splitting into ${SEGMENT_SECONDS}s segments.`);
+    segments = splitAudioIntoSegments(summary.audio_mp3_path, SEGMENT_SECONDS);
+    if (segments) {
+      summary.notes.push(`Split into ${segments.length} segments.`);
+    } else {
+      summary.notes.push("WARN: segmentation failed; falling back to single-shot transcription (may be truncated).");
+    }
+  }
+
+  // --- Step C: transcribe (segmented w/ timestamps, or single) with retry ---
   const transcriptionJsonPath = resolve(outputDir, "transcription_result.json");
+  const allSegmentTexts = [];
+  const allSegmentResults = [];
+
+  if (segments && segments.length > 1) {
+    for (let i = 0; i < segments.length; i += 1) {
+      const segPath = segments[i];
+      const segStartSec = i * SEGMENT_SECONDS;
+      try {
+        const r = await transcribeSingleWithRetry(segPath, apiKey, model, `seg${i + 1}/${segments.length}`);
+        allSegmentResults.push(r.json ?? {});
+        if (r.text) {
+          allSegmentTexts.push(`${formatTimestamp(segStartSec)} ${r.text}`);
+        }
+      } catch (segError) {
+        summary.notes.push(`WARN: segment ${i + 1}/${segments.length} failed after retries: ${segError.message}`);
+      }
+    }
+    // cleanup segment files
+    for (const segPath of segments) {
+      try { await rm(segPath, { force: true }); } catch { /* ignore */ }
+    }
+  } else {
+    const r = await transcribeSingleWithRetry(summary.audio_mp3_path, apiKey, model, "full");
+    allSegmentResults.push(r.json ?? {});
+    if (r.text) {
+      allSegmentTexts.push(r.text);
+    }
+  }
+
+  summary.transcription_json_path = transcriptionJsonPath;
   await writeFile(
     transcriptionJsonPath,
-    JSON.stringify(transcription.json ?? { raw: transcription.rawText }, null, 2),
+    JSON.stringify({ segments: allSegmentResults, combined: allSegmentTexts.join("\n") }, null, 2),
     "utf8"
   );
-  summary.transcription_json_path = transcriptionJsonPath;
 
-  const transcriptText = transcription.json?.text;
-  if (typeof transcriptText === "string" && transcriptText.trim()) {
+  const transcriptText = allSegmentTexts.join("\n");
+  if (transcriptText.trim()) {
     const transcriptPath = resolve(outputDir, "transcript.txt");
     await writeFile(transcriptPath, `${transcriptText}\n`, "utf8");
     summary.transcript_path = transcriptPath;
+    summary.segment_count = segments && segments.length > 1 ? segments.length : 1;
   } else {
     summary.notes.push("SiliconFlow returned no usable text field.");
   }
