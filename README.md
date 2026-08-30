@@ -159,3 +159,40 @@ Contributions are welcome! Please open an issue or pull request.
 ## License
 
 [MIT](LICENSE)
+
+---
+
+## Install as an Agent Skill (OpenClaw / Claude Code / Hermes)
+
+This repo is a universal skill — the root `SKILL.md` carries frontmatter that
+OpenClaw, Claude Code, and Hermes all recognize (each reads its own namespace
+and ignores the others).
+
+### OpenClaw
+
+```bash
+openclaw skills install git:EricArcha/Read-Bili --global
+```
+
+### Claude Code
+
+```bash
+mkdir -p ~/.claude/skills/read-bili
+git clone --depth 1 https://github.com/EricArcha/Read-Bili.git ~/.claude/skills/read-bili
+```
+
+### Hermes
+
+```bash
+mkdir -p ~/.hermes/skills/media/read-bili
+git clone --depth 1 https://github.com/EricArcha/Read-Bili.git ~/.hermes/skills/media/read-bili
+```
+
+> Trigger words (description): B站视频总结 / B站转写 / B站字幕提取 / 视频讲了什么 /
+> 帮我解读 / BV号解析 / 视频语音转文字 / 总结这个视频. This skill handles voice
+> content transcription & summarization; for danmaku (comment) extraction use
+> `bilibili-danmaku-extractor` instead.
+
+## Author
+
+Maintained by **EricArcha (Eric Lei)**.
