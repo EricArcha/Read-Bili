@@ -32,3 +32,10 @@ Manual release checklist:
 - [ ] Cross-platform CI passed; inspect npm pack contents and unpacked CLI.
 
 Publishing npm/GitHub releases is outside this local implementation. Real manual checks must not be claimed complete unless performed.
+# 1.2.1：配置校验与技能交付边界
+
+- 拒绝过短、掩码、非 ASCII 或内部含空白的密钥，诊断区分配置存在与本地格式有效。凭据保存必须读回一致；本地检查不冒充服务端认证。
+- 提供带 UTF-8 BOM 的 Windows 剪贴板配置脚本，纳入 npm 分发包和 agent 安装；文档使用单次进程 ExecutionPolicy，不修改全局策略。
+- 实际安装核对技能、package 和 CLI 版本；显式 --update 即使同版本也重新安装。备份移到用户主目录 `.read-bili-backups`，避免被 agent 发现成重复技能。
+- 技能说明要求完整文字稿才能交付完整总结，区分品牌商单、联盟导购与推测，并保留排障前的原视频任务。
+- 验证：37 项本地测试、发布包安装检查、PowerShell 5.1/7 解析检查通过。三条真实 B 站视频完成分段 ASR，共 19 段全部返回文本；音频与视频元数据时长差均小于 1 秒。真实测试输出和密钥不纳入仓库。

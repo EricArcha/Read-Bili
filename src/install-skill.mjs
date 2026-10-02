@@ -1,12 +1,12 @@
 import { homedir } from 'node:os';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cp, mkdir, mkdtemp, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { runProcess, UsageError } from './process.mjs';
 
 export const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const agents = ['codex', 'claude', 'openclaw', 'hermes'];
-export const bundleFiles = ['src', 'docs', 'SKILL.md', 'README.md', 'LICENSE', 'package.json', 'package-lock.json', 'npm-shrinkwrap.json', 'install.ps1', 'install.sh'];
+export const bundleFiles = ['src', 'docs', 'SKILL.md', 'README.md', 'LICENSE', 'package.json', 'package-lock.json', 'npm-shrinkwrap.json', 'install.ps1', 'install.sh', 'configure-api-key.ps1'];
 export function agentDestination(agent, { env = process.env, home = homedir() } = {}) {
   if (agent === 'codex') return join(env.CODEX_HOME || join(home, '.codex'), 'skills/read-bili');
   if (agent === 'claude') return join(home, '.claude/skills/read-bili');
@@ -52,7 +52,7 @@ export async function installSkill({ selection, destination, update = false, roo
     if (present) {
       let marker;
       try { marker = JSON.parse(await readFile(join(target, '.read-bili-install.json'), 'utf8')); } catch { /* not a managed installation */ }
-      if (marker?.name === 'read-bili' && marker.version === pkg.version) {
+      if (!update && marker?.name === 'read-bili' && marker.version === pkg.version) {
         try { await validate(target); results.push({ agent, target, status: 'unchanged' }); continue; }
         catch { if (!update) throw new Error(`Installation is damaged: ${target}. Use --update to repair it.`); }
       }
@@ -71,7 +71,14 @@ export async function installSkill({ selection, destination, update = false, roo
       await dependencies(staging);
       await writeFile(join(staging, '.read-bili-install.json'), JSON.stringify({ name: 'read-bili', version: pkg.version, agent, installedAt: new Date().toISOString() }, null, 2));
       await validate(staging);
-      if (present) { const backupPath = `${target}.backup-${Date.now()}`; await rename(target, backupPath); backup = backupPath; }
+      if (present) {
+        const backupRoot = resolve(home, '.read-bili-backups');
+        const realBackupRoot = await canonical(backupRoot);
+        if (within(realTarget, realBackupRoot) || within(realRoot, realBackupRoot)) throw new UsageError('Backup directory must be outside the installation and source directories.');
+        await mkdir(backupRoot, { recursive: true });
+        const backupPath = join(backupRoot, `${agent}-${basename(target)}-${Date.now()}`);
+        await rename(target, backupPath); backup = backupPath;
+      }
       await rename(staging, target); installed = true;
       await validate(target);
       results.push({ agent, target, status: present ? 'updated' : 'installed', backup: backup || null });
@@ -86,6 +93,9 @@ export async function installSkill({ selection, destination, update = false, roo
 export async function validateBundle(root) {
   const skill = await readFile(join(root, 'SKILL.md'), 'utf8');
   if (!/^---\r?\nname: read-bili\r?\n/.test(skill)) throw new Error('Invalid SKILL.md in installation.');
+  const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+  const version = skill.match(/^  version: "([^"]+)"\r?$/m)?.[1];
+  if (pkg.name !== 'read-bili' || version !== pkg.version) throw new Error('Skill and package versions do not match in installation.');
   const result = await runProcess(process.execPath, [join(root, 'src/cli.mjs'), '--help'], { cwd: root, timeout: 15000 });
-  if (!result.stdout.includes('Usage:') || !result.stdout.includes('Read-Bili')) throw new Error('Installed CLI did not produce help output.');
+  if (!result.stdout.includes('Usage:') || !result.stdout.startsWith(`Read-Bili ${pkg.version} —`)) throw new Error('Installed CLI did not produce matching version/help output.');
 }

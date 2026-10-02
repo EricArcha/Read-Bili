@@ -11,7 +11,7 @@ export async function doctor({ mode = 'asr', platform = process.platform, env = 
       checks.push({ name, status: result ? 'ok' : 'missing', version: result?.version || null, path: result?.path || null, repair: result ? null : repairHint(name, platform) });
     }
     const result = await key({ env });
-    checks.push({ name: 'siliconflow-key', status: result.value ? 'ok' : 'missing', version: null, path: null, source: result.source, repair: result.value ? null : result.warning || 'Run read-bili configure key set or set SILICONFLOW_API_KEY.' });
+    checks.push({ name: 'siliconflow-key', status: result.invalid ? 'invalid' : result.value ? 'ok' : 'missing', version: null, path: null, source: result.source, repair: result.value ? null : result.warning || 'Run read-bili configure key set or set SILICONFLOW_API_KEY.' });
   }
   return { schemaVersion: 1, platform, mode, checks, ready: checks.every(check => check.status === 'ok') };
 }

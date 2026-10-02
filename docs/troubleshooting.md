@@ -1,5 +1,9 @@
 # 故障排查
 
+- “此系统上禁止运行脚本”：使用 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "脚本绝对路径"`，只作用于本次进程；不要建议永久 Set-ExecutionPolicy。组策略限制下改用 Node CLI，不修改组策略。
+- “已配置”但请求头无效：先运行 `configure key status` 和 `doctor --mode asr --json`。旧配置可能保存了非空掩码字符；新版区分配置存在与格式有效。确认来源和格式，不要求在聊天里提供密钥；无效环境变量会覆盖凭据库，不静默切换。
+- 仓库和已安装版本不同：分别核对实际目录的 package.json、SKILL.md 和 CLI --help；使用 `install-skill --agent codex --update`，然后对目标目录运行帮助和 doctor 验证。仅源码、测试或打包通过不能算已安装。
+
 - 命令找不到：运行 doctor。显式路径优先；检查 READ_BILI_* 是否指向可执行文件。安装后旧应用需要重启以读取新的 PATH。
 - PowerShell 中文乱码或解析失败：使用仓库提供的入口；其提示为 ASCII，兼容 Windows PowerShell 5.1 与 PowerShell 7。不要随意改编码。自制中文脚本在 PowerShell 5.1 上使用 UTF-8 BOM。
 - npm 或包管理器无法联网：已成功步骤会保留，恢复网络后重新执行；不下载来源不明的替代可执行文件。

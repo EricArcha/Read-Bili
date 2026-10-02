@@ -1,6 +1,6 @@
 {
   "name": "read-bili",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Bilibili video transcription & summarization tool — download audio, transcribe via SiliconFlow ASR, and output readable transcripts.",
   "type": "module",
   "main": "src/cli.mjs",
@@ -14,6 +14,7 @@
     "package-lock.json",
     "npm-shrinkwrap.json",
     "install.ps1",
+    "configure-api-key.ps1",
     "install.sh",
     "README.md",
     "LICENSE"

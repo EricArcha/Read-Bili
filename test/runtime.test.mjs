@@ -21,6 +21,12 @@ test('ASR doctor reports failures without exposing key', async () => {
   assert.equal(report.ready, false); assert.equal(report.schemaVersion, 1); assert.ok(!JSON.stringify(report).includes('top-secret'));
   await assert.rejects(doctor({ mode: 'bad' }), { exitCode: 2 });
 });
+test('doctor diagnoses malformed environment keys without treating them as ready', async () => {
+  const report = await doctor({ env: { SILICONFLOW_API_KEY: '●' }, find: async () => ({ path: '/tool', version: 'v1' }) });
+  assert.equal(report.ready, false);
+  assert.equal(report.checks.find(x => x.name === 'siliconflow-key').status, 'invalid');
+  assert.ok(!JSON.stringify(report).includes('●'));
+});
 test('tool override takes precedence and invalid override is not bypassed', async () => {
   const calls = [];
   const tool = await findTool('ffmpeg', { env: { READ_BILI_FFMPEG: '/special space/ffmpeg', PATH: '/other' }, execute: async (path, args) => { calls.push([path, args]); return { stdout: 'version1\nmore' }; } });

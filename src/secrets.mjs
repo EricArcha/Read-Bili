@@ -1,12 +1,20 @@
 import { registerSecret, UsageError } from './process.mjs';
 
+// Plausibility check only: the server still decides whether a token is valid.
+export function validKey(value) {
+  return typeof value === 'string' && /^[\x21-\x7e]{20,}$/.test(value.trim());
+}
+const invalidKeyWarning = 'Configured SiliconFlow key has an invalid local format. Copy the complete token and configure it in your own terminal. No secret values are printed; no ASR request was sent.';
+
 export async function openKeyring(platform = process.platform, load = () => import('@napi-rs/keyring')) {
   const { Entry } = await load();
   return new Entry('read-bili', 'siliconflow', platform === 'linux' ? { linux: { store: 'secret-service' } } : {});
 }
 export async function resolveKey({ explicit, env = process.env, keyring = openKeyring } = {}) {
   if (explicit || env.SILICONFLOW_API_KEY) {
-    const value = explicit || env.SILICONFLOW_API_KEY;
+    const raw = explicit || env.SILICONFLOW_API_KEY;
+    const value = typeof raw === 'string' ? raw.trim() : '';
+    if (!validKey(value)) return { value: '', source: explicit ? 'argument' : 'environment', invalid: true, warning: invalidKeyWarning };
     registerSecret(value);
     return { value, source: explicit ? 'argument' : 'environment', warning: null };
   }
@@ -17,6 +25,8 @@ export async function resolveKey({ explicit, env = process.env, keyring = openKe
       if (/NoEntry|no entry|not found|no credential/i.test(error.message)) return { value: '', source: 'none', warning: null };
       throw error;
     }
+    if (value && !validKey(value)) return { value: '', source: 'keyring', invalid: true, warning: invalidKeyWarning };
+    value = value?.trim();
     registerSecret(value);
     return { value: value || '', source: value ? 'keyring' : 'none', warning: null };
   } catch {
@@ -46,7 +56,7 @@ export function readHidden({ input = process.stdin, output = process.stderr } = 
 export async function configureKey(action, { keyring = openKeyring, hidden = readHidden, env = process.env, output = console.log } = {}) {
   if (action === 'status') {
     const key = await resolveKey({ env, keyring });
-    output(JSON.stringify({ configured: Boolean(key.value), source: key.source, readable: Boolean(key.value), warning: key.warning }, null, 2)); return;
+    output(JSON.stringify({ configured: Boolean(key.value) || Boolean(key.invalid), source: key.source, readable: Boolean(key.value), validFormat: Boolean(key.value), warning: key.warning }, null, 2)); return;
   }
   if (!['set', 'delete'].includes(action)) throw new UsageError('Use configure key set|status|delete.');
   let entry;
@@ -56,8 +66,11 @@ export async function configureKey(action, { keyring = openKeyring, hidden = rea
     output('Read-Bili credential deleted. Existing environment variables were not modified.'); return;
   }
   const value = (await hidden()).trim();
-  if (!value) throw new UsageError('Empty key: configuration was not modified.');
+  if (!validKey(value)) throw new UsageError('Invalid key format: configuration was not modified. Copy the complete token; do not enter masking characters or paste it into chat.');
   registerSecret(value);
   try { entry.setPassword(value); } catch { throw new Error('Could not save credential. Unlock your credential store.'); }
-  output('Key saved in the system credential store. Environment variables take precedence.');
+  try { if (entry.getPassword() !== value) throw new Error('mismatch'); }
+  catch { throw new Error('Credential write could not be verified. No successful configuration is reported; check the credential store in your own terminal.'); }
+  output('Key format checked and credential save verified (server validity not checked). Environment variables take precedence.');
+  if (env.SILICONFLOW_API_KEY && env.SILICONFLOW_API_KEY.trim() !== value) output('An existing environment token overrides this saved credential. Update or explicitly remove that environment variable in your own terminal, then restart the agent.');
 }

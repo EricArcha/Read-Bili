@@ -8,7 +8,7 @@ import { setup } from './setup.mjs';
 import { installSkill } from './install-skill.mjs';
 import { beginOperation, cancelProcesses, operationSignal, redact, UsageError } from './process.mjs';
 
-export const help = `Read-Bili 1.2.0 — subtitles and audio transcription
+export const help = `Read-Bili 1.2.1 — subtitles and audio transcription
 Usage:
   read-bili probe <url|BV> [--output-dir ./output]
   read-bili run <url|BV> [--output-dir ./output] [--model <model>]
