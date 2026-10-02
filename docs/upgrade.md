@@ -19,6 +19,8 @@ PowerShell 5.1 and 7 bootstrap dry runs passed from outside the source directory
 
 Live probe of repository example BV1R6PzzAE9k returned its title/BV/cid but no official subtitles or anonymous audio streams. This validates metadata probing only; it does not complete the real subtitle or paid ASR release checks below. No real cookies or paid ASR calls were used.
 
+CI run 36981157939 passed 9 of 10 jobs; macOS arm64 / Node 22 passed all 31 core tests but failed the packaged CLI smoke check. macOS temporary paths can use /var aliases for /private/var: ESM resolved the CLI path while argv retained the alias, so the lexical entrypoint comparison skipped execution. The entrypoint now compares real paths, installation validation requires actual help output, and a symlink/junction regression test covers this case. The expanded 32-test suite passed locally on Node 18/22/24, including the package smoke check on Node 24.
+
 Automated tests mock remote Bilibili/ASR responses and credential backends; no real browser cookies or paid ASR calls are used. CI covers Node 18/22/24 on Windows/macOS/Ubuntu and an additional Intel macOS job. Platform and architecture claims require successful CI before release.
 
 Manual release checklist:

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
+import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { doctor, printDoctor } from './doctor.mjs';
 import { configureKey, resolveKey } from './secrets.mjs';
@@ -71,4 +72,5 @@ export async function runCli(argv) {
   catch (error) { console.error(redact(error.message)); process.exitCode = error.exitCode || 1; }
   finally { process.removeListener('SIGINT', cancel); process.removeListener('SIGTERM', cancel); }
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) await runCli();
+// ESM resolves symlinks, while argv may retain /var vs /private/var on macOS.
+if (process.argv[1] && realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url))) await runCli();

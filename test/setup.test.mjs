@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile, mkdir, readdir, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, mkdir, readdir, rm, stat, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { configureKey, resolveKey, readHidden, openKeyring } from '../src/secrets.mjs';
@@ -104,4 +104,12 @@ test('legacy CLI works from arbitrary cwd and argument errors exit 2', async t =
   const cwd = await temporary(t);
   const help = await runProcess(process.execPath, [join(sourceRoot, 'src/bilibili_pipeline.mjs'), '--help'], { cwd }); assert.match(help.stdout, /Read-Bili 1.2.0/);
   await assert.rejects(runProcess(process.execPath, [join(sourceRoot, 'src/cli.mjs'), 'doctor', '--mode', 'invalid'], { cwd }), /exit=2/);
+});
+test('CLI executes through a symlinked directory (macOS /var temporary paths)', async t => {
+  const cwd = await temporary(t), linked = join(cwd, 'linked source');
+  await symlink(sourceRoot, linked, process.platform === 'win32' ? 'junction' : 'dir');
+  const help = await runProcess(process.execPath, [join(linked, 'src/cli.mjs'), '--help'], { cwd });
+  assert.match(help.stdout, /Read-Bili 1.2.0/);
+  const report = await runProcess(process.execPath, [join(linked, 'src/cli.mjs'), 'doctor', '--mode', 'subtitle', '--json'], { cwd });
+  assert.equal(JSON.parse(report.stdout).ready, true);
 });

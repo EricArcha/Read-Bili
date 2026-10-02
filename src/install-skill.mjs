@@ -86,5 +86,6 @@ export async function installSkill({ selection, destination, update = false, roo
 export async function validateBundle(root) {
   const skill = await readFile(join(root, 'SKILL.md'), 'utf8');
   if (!/^---\r?\nname: read-bili\r?\n/.test(skill)) throw new Error('Invalid SKILL.md in installation.');
-  await runProcess(process.execPath, [join(root, 'src/cli.mjs'), '--help'], { cwd: root, timeout: 15000 });
+  const result = await runProcess(process.execPath, [join(root, 'src/cli.mjs'), '--help'], { cwd: root, timeout: 15000 });
+  if (!result.stdout.includes('Usage:') || !result.stdout.includes('Read-Bili')) throw new Error('Installed CLI did not produce help output.');
 }
