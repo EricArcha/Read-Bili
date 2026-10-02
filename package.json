@@ -1,20 +1,34 @@
 {
   "name": "read-bili",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Bilibili video transcription & summarization tool — download audio, transcribe via SiliconFlow ASR, and output readable transcripts.",
   "type": "module",
-  "main": "src/bilibili_pipeline.mjs",
+  "main": "src/cli.mjs",
   "bin": {
-    "read-bili": "./src/bilibili_pipeline.mjs"
+    "read-bili": "./src/cli.mjs"
   },
   "files": [
     "src/",
     "docs/",
+    "SKILL.md",
+    "package-lock.json",
+    "npm-shrinkwrap.json",
+    "install.ps1",
+    "install.sh",
     "README.md",
     "LICENSE"
   ],
   "engines": {
     "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test",
+    "test:package": "node scripts/package-smoke.mjs",
+    "doctor": "node src/cli.mjs doctor",
+    "setup": "node src/cli.mjs setup"
+  },
+  "optionalDependencies": {
+    "@napi-rs/keyring": "2.1.0"
   },
   "keywords": [
     "bilibili",

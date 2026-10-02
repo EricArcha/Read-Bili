@@ -1,0 +1,42 @@
+name: CI
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+        node: [18, 22, 24]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: node src/cli.mjs doctor --mode subtitle --json
+      - run: npm pack --dry-run
+      - run: npm run test:package
+        if: matrix.node == 22
+      - name: POSIX bootstrap dry run
+        if: runner.os != 'Windows'
+        run: sh install.sh --dry-run
+      - name: Windows PowerShell 5.1 bootstrap dry run
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./install.ps1 --dry-run
+      - name: PowerShell 7 bootstrap dry run
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./install.ps1 --dry-run
+  macos-intel:
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm test
